@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset=utf-8 />
+    <title>Kentucky Housing Vacancies </title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+
+    <script src="https://code.jquery.com/jquery-1.12.2.min.js"></script>
+<script src="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-statistics/1.0.1/simple_statistics.js"></script>
+
+    <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.css" />
+    <link href='http://fonts.googleapis.com/css?family=Lato' rel='stylesheet' type='text/css'>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: whitesmoke;
+            font-family: Lato, sans-serif;
+            color: #0D0000;
+        }
+        header {
+            width: 80%;
+            margin: 10px auto 10px auto;
+        }
+        h1 {
+            display: inline-block;
+            margin-right: 20px;
+            color: #001323;
+        }
+        h2 {
+            display: inline-block;
+            color: #001323;
+        }
+        #map {
+            width: 80%;
+            height: 700px;
+            margin: 10px 10%;
+            background: whitesmoke;
+            border: 2px solid #CACACA;
+        }
+        #ui-controls{
+            margin-left: 10%; 
+        }
+        #ui-controls label {
+            font-size: 1em;
+            margin-right: 5px
+        }
+        footer {
+            padding: 6px 10%;
+            width: 80%;
+        }
+        p {
+            font-size: 1em;
+            color: #001323;
+        }
+        .legend {
+            padding: 6px 8px;
+            font-size: 1em;
+            background: rgba(255,255,255,0.8);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            width: 160px;
+        }
+        .legend h3 {
+            font-size: 1em;
+            font-weight: bold;
+            color: #001323;
+            margin: 0 0 10px 0;
+        }
+        .legend span {
+            width: 20px;
+            height: 20px;
+            float: left;
+            margin: 0 10px 4px 0;
+        }
+        .legend label {
+            font-size: 1.1em;
+        }
+        .legend label:after {
+            content: '';
+            display: block;
+            clear: both;
+        }
+        .leaflet-popup-content {
+            max-width: 160px;   
+        }
+        .info{
+            padding: 6px 8px;
+            font-size: 1em;
+            background:rgba(255,255,255,.8);
+            box-shadow: 0 0 015px rgba(0,0,0,.2);
+            border-radius: 5px;
+            text-align: right;
+        }
+        .info h3{
+            margin: 0;
+        }
+
+        
+        
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Housing Vacancies in the State of Kentucky</h1>
+        <h2>2010 Census</h2>
+    </header>
+    <div id ='ui-controls'>
+        <label> Choose a data attribute:</label>
+        <select id = "vacant"> 
+            <option value="VACANT_FOR" selected>vacant units for rent</option>
+            <option value="VACANT_REN" >vacant units rented not occupied</option>
+            <option value="VACANT_FO2" >vacant units for sale</option>
+            <option value="VACANT_SOL" >vacant units sole not occupied</option>
+            <option value="VACANT_SEA" >vacant units used seasonally</option>
+            <option value="VACANT_MIG" >vacant units used for migratory workers</option>
+        </select>
+    </div>
+    <div id='map'></div>
+
+    <footer>
+        <p>Map authored by Tyler Hegwood</p>
+        <p>Housing Data Sourced from the 2010 US Census</p>
+        <p></p>
+    </footer>
+
+    <script>
+        
+        var options = {
+            center: [37.8, -85.8],
+            zoom: 7.4,
+            minZoom: 7.4,
+            maxZoom: 7.4,
+            dragging: false,
+            zoomControl: false
+        }
+        var map = L.map('map', options);
+                
+        var dataLayer,
+            attribute = "VACANT_FOR",
+            norm = "VACANT";
+    
+    //JQuery method to import GeoJSON data file useable in this lab      
+        $.getJSON("ky_counties_housing.json", function(data) {
+        
+    //Instantiate geoJson map with basic style options          
+            dataLayer = L.geoJson(data, {
+                 style: function(feature) {
+                    return {
+                            color: '#dddddd',
+                            weight: 2,
+                            fillOpacity: 1,
+                            fillColor: '#1f78b4'
+                    };
+                }        
+            }).addTo(map);
+            
+    //'Function Junction' where the main operating functions are called to build the project         
+            drawLegend();
+            drawMap();
+            drawInfo();
+            buildUI();  
+              
+        });
+        
+        var labels = { 
+            "VACANT": "% total vacant units",
+            "VACANT_FOR": "% vacant housing units for rent",
+            "VACANT_FO2": "% vacant housing units for sale",
+            "VACANT_SEA": "% vacant seasonal housing units",
+            "VACANT_REN": "% vacant units rented not occupied",
+            "VACANT_SOL": "% vacant units sole not occupied",
+            "VACANT_MIG": "% vacant units used for migratory workers",
+        }; 
+        
+    //content of drawMap function where layers are colored by getClassBreaks function from below, as well as
+    //layer mouseover/out highlight method, popup is bound, functionality to show or hide info box based on 
+    // whether user is moused over map layer, and functions called to update info box and legend breaks based on user
+    //data selection     
+        function drawMap() {
+            
+            var breaks = getClassBreaks();
+
+            dataLayer.eachLayer(function(layer) {
+                
+                var props = layer.feature.properties;
+        
+                layer.setStyle({
+                    fillColor: getColor(props[attribute]/
+                                        props[norm], breaks)
+                });
+                
+                layer.on('mouseover', function(){
+                        layer.setStyle({
+                        color: '#FFFF00',
+                        weight: 4
+                        }).bringToFront();
+                });
+                
+                layer.on('mouseout', function(){
+                        layer.setStyle({
+                        color: '#dddddd',
+                        weight: 2    
+                    });
+                });
+            
+                
+                layer.bindPopup("<b>"+props["NAME"]+" County</b><br>" +
+                                labels[attribute] + ": " +
+                                ((props[attribute]/props[norm])*100).toLocaleString()+"%");
+                
+                layer.on('mouseover', function(){
+                    dataLayer.on('mouseover',function(){
+                        $(".info").show();
+                    });
+                    
+                    dataLayer.on('mouseout',function(){
+                        $(".info").hide();
+                    });
+                
+                    updateInfo(this);
+                    
+                });
+            
+        });
+                
+            updateLegend(breaks)
+        
+        };
+        
+        
+    //function to calculate and retutn class breaks to the drawMap function using the ckmeans clustering method from the simple statistics js library          
+        function getClassBreaks() {
+            
+            var values = [];
+            
+            dataLayer.eachLayer(function(layer) {
+                var value = layer.feature.properties[attribute]/layer.feature.properties[norm];
+                values.push(value);   
+            }); 
+           
+            var clusters = ss.ckmeans(values, 5);
+
+            var breaks = clusters.map(function(cluster){
+                return [cluster[0],cluster.pop()];   
+            });
+
+            return breaks;
+            
+        }   
+        
+    //getColor function content that uses the breaks establashed above to deliniate color codes for each layer based on the 
+    //clusters generated with the ck means method
+        function getColor(d, breaks) {
+            
+            if(d <= breaks[0][1]) {
+                return '#f1eef6';
+            } else if(d <= breaks[1][1]) {
+                return '#bdc9e1';
+            } else if(d <= breaks[2][1]) {
+                return '#74a9cf';
+            } else if(d <= breaks[3][1]) {
+                return '#2b8cbe'
+            } else if(d <= breaks[4][1]) {
+                return '#045a8d'
+            }
+        }
+        
+    //establish legend and call legend style from .legend css class     
+        function drawLegend() {
+            
+            var legend = L.control({position: 'topleft'});
+    
+            legend.onAdd = function (map) {
+                
+                var div = L.DomUtil.create('div', 'legend');
+                               
+                return div;                
+            };
+            
+
+            legend.addTo(map);
+        }
+        
+    //UI data selector build using jQuery select and change event    
+        function buildUI(){
+            $('select[id="vacant"]').change(function(){
+                attribute = $(this).val();
+                drawMap();
+            })
+        }
+            
+    //using jQuery to effect changes to .legend class styles from user data selection    
+        function updateLegend(breaks){
+            
+                var legend = $('.legend').html("<h3>" + labels[attribute] + "</h3><ul>");
+                //var legend = $('.legend')
+                //legend.html("<h3>" + labels[attribute] + " per " + norm + "</h3>"); 
+                
+                for (var i = 0; i < breaks.length; i++) {
+            
+                var color = getColor(breaks[i][0], breaks);
+                    
+                legend.append(
+                        '<span style="background:' + color + '"></span> ' +
+                        '<label>'+(breaks[i][0]*100).toLocaleString() + ' &mdash; ' + 
+                        (breaks[i][1]*100).toLocaleString() + '</label>');
+                }
+        }
+        
+    //info box generated using leaflet control method     
+        function drawInfo(){
+            var info = L.control( {position: 'topright'});
+            
+            info.onAdd = function(map) {
+                
+                var div = L.DomUtil.create('div', 'info');
+                
+                return div;
+            }
+            
+            info.addTo(map);
+            $(".info").hide();
+        }
+        
+    //content related to the info box      
+        function updateInfo(layer){
+            var props = layer.feature.properties;
+            
+            var html =  "<h3>"+props['NAME']+" County</h3>"+
+                        "total # vacant units: <b>"+ props["VACANT"]+"</b><br>"+
+                        "# vacant units listed for rent: <b>"+ props["VACANT_FOR"]+"</b><br>"+
+                        "# vacant units rented not occupied: <b>"+ props["VACANT_REN"]+"</b><br>"+
+                        "# vacant units listed for sale: <b>"+ props["VACANT_FO2"]+"</b><br>"+
+                        "# vacant units sole not occupied: <b>"+ props["VACANT_SOL"]+"</b><br>"+
+                        "# vacant units used seasonally: <b>"+ props["VACANT_SEA"]+"</b><br>"+
+                        "# vacant units used for migratory workers: <b>"+ props["VACANT_MIG"]+"</b><br>"
+                        
+            $(".info").html(html);
+            
+            };
+            
+        
+            
+        
+
+
+    </script>
+    
+</body>
+
+</html>
